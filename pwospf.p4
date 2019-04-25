@@ -2,23 +2,29 @@
 #include <core.p4>
 #include <v1model.p4>
 
-const bit<16> TYPE_IPV4 = 0x800;
-
 /*************************************************************************
 *********************** H E A D E R S  ***********************************
 *************************************************************************/
 
+/* Easier to use IPv4 and PWOSPF constants */
+const bit<16> TYPE_IPV4 = 0x800;
+const bit<8>  TYPE_PWOSPF  = 0x59; // 89
+
+/* Type definitions */
 typedef bit<9>  egressSpec_t;
 typedef bit<48> macAddr_t;
 typedef bit<32> ip4Addr_t;
 typedef bit<16> mcastGrp_t;
 
+// SZ: 8bits = 1
+#define ETH_SZ 14
 header ethernet_t {
     macAddr_t dstAddr;
     macAddr_t srcAddr;
     bit<16>   etherType;
 }
 
+#define IPV4_SZ 20
 header ipv4_t {
     bit<4>    version;
     bit<4>    ihl;
@@ -34,6 +40,19 @@ header ipv4_t {
     ip4Addr_t dstAddr;
 }
 
+/* PWOSPF Packet */
+#define PWOSPF_SZ 24
+header pwospf_t {
+    bit<8>    version;
+    bit<8>    type;
+    bit<16>   totalLen;
+    bit<32>   routerID;
+    bit<32>   areaID;
+    bit<16>   hdrChecksum;
+    bit<16>   autype;
+    bit<64>   authentication;
+}
+
 struct metadata {
     /* empty */
 }
@@ -41,6 +60,7 @@ struct metadata {
 struct headers {
     ethernet_t   ethernet;
     ipv4_t       ipv4;
+    pwospf_t pwospf;
 }
 
 /*************************************************************************
@@ -66,6 +86,14 @@ parser MyParser(packet_in packet,
 
     state parse_ipv4 {
         packet.extract(hdr.ipv4);
+        transition select(hdr.ipv4.protocol) {
+            TYPE_PWOSPF: parse_pwospf;
+            default: accept;
+        }
+    }
+    
+    state parse_pwospf {
+        packet.extract(hdr.pwospf);
         transition accept;
     }
 
@@ -97,10 +125,6 @@ control MyIngress(inout headers hdr,
         standard_metadata.egress_spec = port;
         decr_ttl();
     }
-    action set_mgid(mcastGrp_t mgid) {
-        standard_metadata.mcast_grp = mgid;
-        decr_ttl();
-    }
 
     action forward_to_switch(egressSpec_t port) {
         set_egr(port);
@@ -112,7 +136,6 @@ control MyIngress(inout headers hdr,
         actions = {
             drop;
             set_egr;
-            set_mgid;
             NoAction;
         }
         size = 1024;
@@ -209,6 +232,7 @@ control MyDeparser(packet_out packet, in headers hdr) {
     apply {
         packet.emit(hdr.ethernet);
         packet.emit(hdr.ipv4);
+        packet.emit(hdr.pwospf);
     }
 }
 

@@ -1,6 +1,7 @@
 from p4app import P4Mininet
 from mininet.topo import Topo
 from myTopo import MyTopo
+from controller import PWOSPFController
 
 N = 2 # Number of switches
 K = 3 # Number of hosts per switch
@@ -41,5 +42,13 @@ for i in range((N-1)* K + 1, N * K + 1):
                         action_name='MyIngress.set_egr',
                         action_params={'port': i})
 
+# Start a controller for each switch
+cpu1 = PWOSPFController(s1)
+cpu1.start()
 
-print h3.cmd('ping -c1 10.0.0.2')
+cpu2 = PWOSPFController(s2)
+cpu2.start()
+
+# s1.printTableEntries()
+
+# print net.pingAll()

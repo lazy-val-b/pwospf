@@ -3,7 +3,7 @@ from scapy.packet import Packet, bind_layers
 from scapy.layers.inet import IP
 from scapy.layers.l2 import Ether
 
-TYPE_CPU_METADATA = 0x080a
+TYPE_PWOSPF_METADATA = 89
 
 # Add PWSOPF layer
 class PWOSPFMetadata(Packet):
@@ -18,5 +18,5 @@ class PWOSPFMetadata(Packet):
                     LongField("Authentication", 0),
                 ]
 
-bind_layers(Ether, PWOSPFMetadata, type=TYPE_CPU_METADATA)
-bind_layers(PWOSPFMetadata, IP, origEtherType=0x0800)
+bind_layers(Ether, PWOSPFMetadata, type=TYPE_PWOSPF_METADATA)
+bind_layers(IP, PWOSPFMetadata, proto=TYPE_PWOSPF_METADATA)

@@ -11,18 +11,26 @@ class MyTopo( Topo ):
             key = 's' + str(i)
             switches[key] = self.addSwitch(key)
 
-        for i in xrange(1, n * k+1):
-            key = 'h' + str(i)
-            hosts[key] = self.addHost(key, ip = "10.0.0.%d" % i, mac = '00:00:00:00:00:%02x' % i)
+        hosts['h1'] = self.addHost('h1', ip = "10.0.0.1", mac = '00:00:00:00:00:01')
+        hosts['h2'] = self.addHost('h2', ip = "10.0.0.2", mac = '00:00:00:00:00:02')
+        hosts['h3'] = self.addHost('h3', ip = "10.0.0.3", mac = '00:00:00:00:00:03')
+        hosts['h4'] = self.addHost('h4', ip = "10.0.0.4", mac = '00:00:00:00:00:04')
+        hosts['c1'] = self.addHost('c1', ip = "10.0.0.5", mac = '00:00:00:00:00:05')
+        hosts['c2'] = self.addHost('c2', ip = "10.0.0.6", mac = '00:00:00:00:00:06')
+
+
+
             
         # Add links (hardcode for now, 3 links per switch)
-        self.addLink(switches['s1'], switches['s2'], port1=0, port2=0)
-        self.addLink(hosts['h1'], switches['s1'], port2=1)
-        self.addLink(hosts['h2'], switches['s1'], port2=2)
-        self.addLink(hosts['h3'], switches['s1'], port2=3)
-        self.addLink(hosts['h4'], switches['s2'], port2=4)
-        self.addLink(hosts['h5'], switches['s2'], port2=5)
-        self.addLink(hosts['h6'], switches['s2'], port2=6)
+        self.addLink(switches['s1'], switches['s2'], port1=4, port2=4)
+
+        self.addLink(hosts['c1'], switches['s1'], port2=1)
+        self.addLink(hosts['c2'], switches['s2'], port2=1)
+
+        self.addLink(hosts['h1'], switches['s1'], port2=2)
+        self.addLink(hosts['h2'], switches['s1'], port2=3)
+        self.addLink(hosts['h3'], switches['s2'], port2=2)
+        self.addLink(hosts['h4'], switches['s2'], port2=3)
 
 
 

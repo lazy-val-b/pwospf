@@ -121,38 +121,39 @@ control MyIngress(inout headers hdr,
     action decr_ttl() {
         hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
     }
-    action set_egr(egressSpec_t port) {
+    action ipv4_forward(macAddr_t dstAddr, egressSpec_t port) {
         standard_metadata.egress_spec = port;
+        hdr.ethernet.dstAddr  = dstAddr;
         decr_ttl();
     }
 
-    action forward_to_switch(egressSpec_t port) {
-        set_egr(port);
-    }
+    // action forward_to_switch(egressSpec_t port) {
+    //     set_egr(port);
+    // }
     table ipv4_lpm {
         key = {
             hdr.ipv4.dstAddr: lpm;
         }
         actions = {
             drop;
-            set_egr;
+            ipv4_forward;
             NoAction;
         }
         size = 1024;
         default_action = NoAction();
     }
 
-    table switch_forward {
-        key = {
-            hdr.ipv4.dstAddr: lpm;
-        }
-        actions = {
-            forward_to_switch;
-            NoAction;
-        }
-        size = 1024;
-        default_action = NoAction();
-    }
+    // table switch_forward {
+    //     key = {
+    //         hdr.ipv4.dstAddr: lpm;
+    //     }
+    //     actions = {
+    //         forward_to_switch;
+    //         NoAction;
+    //     }
+    //     size = 1024;
+    //     default_action = NoAction();
+    // }
 
     apply {
         if (hdr.ipv4.isValid() && hdr.ipv4.ttl > 0) {
@@ -161,7 +162,7 @@ control MyIngress(inout headers hdr,
           }
           else {
             // we need to go to another router
-            switch_forward.apply();
+            // switch_forward.apply();
           };
         }
     }

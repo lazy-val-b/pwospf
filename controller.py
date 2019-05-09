@@ -11,7 +11,7 @@ PWOSPF_OP_HELLO   = 0x0001
 PWOSPF_OP_LSU = 0x0004
 
 class PWOSPFController(Thread):
-    def __init__(self, sw, chost, helloint, mask, areaID, start_wait=0.3):
+    def __init__(self, sw, chost, helloint, mask, areaID, tableEntries, start_wait=0.3):
         super(PWOSPFController, self).__init__()
         self.sw = sw
         self.start_wait = start_wait # time to wait for the controller to be listenning
@@ -27,22 +27,27 @@ class PWOSPFController(Thread):
             'areaID': areaID,
             'mask': mask
         }
+        print tableEntries
+        for entry in tableEntries:
+            self.addMacAddr(entry['mac'], entry['ip'], entry['port'])
 
 
 
-    def addMacAddr(self, mac, port):
+    def addMacAddr(self, mac, ip, port):
         # Don't re-add the mac-port mapping if we already have it:
         if mac in self.port_for_mac: return
 
-        self.sw.insertTableEntry(table_name='MyIngress.fwd_l2',
-                match_fields={'hdr.ethernet.dstAddr': [mac]},
-                action_name='MyIngress.set_egr',
-                action_params={'port': port})
+        self.sw.insertTableEntry(table_name='MyIngress.ipv4_lpm',
+                        match_fields={'hdr.ipv4.dstAddr': [ip, 32]},
+                        action_name='MyIngress.ipv4_forward',
+                        action_params={ 'dstAddr': mac,
+                                        'port': port})
         self.port_for_mac[mac] = port
 
     def handleArpReply(self, pkt):
         # self.addMacAddr(pkt[ARP].hwsrc, pkt[CPUMetadata].srcPort)
         self.send(pkt)
+
 
     def handleArpRequest(self, pkt):
         self.addMacAddr(pkt[ARP].hwsrc, pkt[CPUMetadata].srcPort)

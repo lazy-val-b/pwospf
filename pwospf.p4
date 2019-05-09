@@ -223,12 +223,12 @@ control MyIngress(inout headers hdr,
 
     apply {
 
-        if (standard_metadata.ingress_port == CPU_PORT){
-            cpu_meta_decap();
-            ipv4_lpm.apply();
-        }
+        // if (standard_metadata.ingress_port == CPU_PORT){
+        //     cpu_meta_decap();
+        //     ipv4_lpm.apply();
+        // }
 
-        else if (hdr.ospf_header.isValid() && standard_metadata.ingress_port != CPU_PORT) {
+        if (hdr.ospf_header.isValid() && standard_metadata.ingress_port != CPU_PORT) {
             send_to_cpu();
         }
         else{

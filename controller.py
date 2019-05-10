@@ -6,12 +6,13 @@ from scapy.all import Packet, Ether, IP, ARP
 from async_sniff import sniff
 from pwospf_protocoll import *
 import time
+import pdb
 
 PWOSPF_OP_HELLO   = 0x0001
 PWOSPF_OP_LSU = 0x0004
 
 class PWOSPFController(Thread):
-    def __init__(self, sw, chost, helloint, mask, areaID, tableEntries, start_wait=0.3):
+    def __init__(self, sw, chost, helloint, mask, areaID, net, start_wait=0.3):
         super(PWOSPFController, self).__init__()
         self.sw = sw
         self.start_wait = start_wait # time to wait for the controller to be listenning
@@ -27,11 +28,44 @@ class PWOSPFController(Thread):
             'areaID': areaID,
             'mask': mask
         }
-        print tableEntries
-        for entry in tableEntries:
-            self.addMacAddr(entry['mac'], entry['ip'], entry['port'])
+        self.dijkstra(net.topo.nodes(), net.topo.links(), self.sw.name)
 
 
+    def dijkstra(self, V, E, me):
+        D = {}
+        p = {}
+        for node in V:
+            D[node] = float('inf')
+            p[node] = None
+            for edge in E:
+                if me in edge:
+                    if node in edge:
+                        D[node] = 1
+                        p[node] = me
+        D[me] = 0
+        checked_nodes = set()
+        checked_nodes.add(me)
+
+        while checked_nodes != set(V):
+            min_distance_node = None
+            min_distance = float('inf')
+            for key in V:
+                if key not in checked_nodes:
+                    if (D[key] <= min_distance):
+                        min_distance_node = key
+                        min_distance = D[key]
+            checked_nodes.add(min_distance_node)
+            for edge in E:
+                if min_distance_node in edge:
+                    neighbour = edge[0] if edge[0] != min_distance_node else edge[1]
+                    if neighbour not in checked_nodes:
+                        if (D[min_distance_node] + 1 < D[neighbour]):
+                            D[neighbour] = D[min_distance_node] + 1
+                            p[neighbour] = min_distance_node
+
+        print(D)
+        print(p)
+        return p
 
     def addMacAddr(self, mac, ip, port):
         # Don't re-add the mac-port mapping if we already have it:
@@ -54,7 +88,7 @@ class PWOSPFController(Thread):
         self.send(pkt)
 
     def handlePkt(self, pkt):
-        pkt.show2()
+        # pkt.show2()
         assert PWOSPFHeader in pkt, "Should only receive packets from switch with special header"
 
         # Ignore packets that the CPU sends:

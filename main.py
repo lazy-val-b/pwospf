@@ -113,10 +113,10 @@ fr2 = [
 ]
 
 # Start the pwospf controller
-controller1 = PWOSPFController(s1, "id1", "area1", fr1, net)
+controller1 = PWOSPFController(s1, "10.0.0.1", 1, 1, 0xFFFFFF00, fr1, net)
 controller1.start()
 
-controller2 = PWOSPFController(s2, "id2", "area1", fr2, net)
+controller2 = PWOSPFController(s2, "10.0.0.2", 2, 1, 0xFFFFFF00, fr2, net)
 controller2.start()
 
 # addForwardingRule(s1, 1, 1)
@@ -129,8 +129,8 @@ controller2.start()
 
 
 # TODO send some update or hello packet
-loss = net.pingAll()
-assert loss == 0
+# loss = net.pingAll()
+# assert loss == 0
 
 
 print("done")

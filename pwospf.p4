@@ -40,7 +40,7 @@ header ethernet_t {
 }
 
 header cpu_metadata_t {
-    bit<8> fromCpu;
+    bit<8> fromCPU;
     bit<16> origEtherType;
     bit<16> srcPort;
 }
@@ -223,12 +223,11 @@ control MyIngress(inout headers hdr,
 
     apply {
 
-        // if (standard_metadata.ingress_port == CPU_PORT){
-        //     cpu_meta_decap();
-        //     ipv4_lpm.apply();
-        // }
-
-        if (hdr.ospf_header.isValid() && standard_metadata.ingress_port != CPU_PORT) {
+        if (standard_metadata.ingress_port == CPU_PORT){
+            cpu_meta_decap();
+            ipv4_lpm.apply();
+        }
+        else if (hdr.ospf_header.isValid() && standard_metadata.ingress_port != CPU_PORT) {
             send_to_cpu();
         }
         else{

@@ -1,4 +1,3 @@
-
 from scapy.all import *
 import sys, os
 
@@ -6,28 +5,30 @@ TYPE_MYTUNNEL = 0x1212
 TYPE_IPV4 = 0x0800
 TYPE_OSPF = 89
 
+
 class PWOSPF_HEADER(Packet):
     name = "pwospf header"
     fields_desc = [
-        ByteField("version", 0),
-        ByteEnumField("type", 2, {1 : "Hello Packet", 4 : "LS Update"}),
+        ByteField("version", 2),
+        ByteEnumField("type", 2, {1: "Hello Packet", 4: "LS Update"}),
         ShortField("packet_length", 0),
         IntField("router_ID", 0),
         IntField("aread_ID", 0),
         ShortField("checksum", 0),
         ShortField("autype", 0),
-        LongField("autentication", 0)
+        LongField("autentication", 0),
     ]
 
     # def mysummary(self):
     #     return self.sprintf("pid=%pid%, dst_id=%dst_id%")
 
+
 class PWOSPF_HELLO(Packet):
     name = "pwospf hello"
     fields_desc = [
         IntField("network_mask", 0),
-        ShortField("hello_int", 0),
-        ShortField("padding", 0)
+        ShortField("hello_int", 60),
+        ShortField("padding", 0),
     ]
 
 
@@ -45,7 +46,7 @@ class PWOSPF_LSU(Packet):
         ShortField("sequence", 0),
         ShortField("ttl", 0),
         IntField("adv_number", 0),
-        IntField("adv", 0)
+        IntField("adv", 0),
     ]
 
 

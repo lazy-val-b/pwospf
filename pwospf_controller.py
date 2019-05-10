@@ -10,15 +10,21 @@ import pdb
 
 OSPF_HELLO = 1
 OSPF_LSU = 4
-INFINITE = 1000
+ALLSPFRouters = "224.0.0.5"
 
 
 class PWOSPFController(Thread):
-    def __init__(self, sw, rid, area_id, fr, network, start_wait=0.3):
+    def __init__(
+        self, sw, address, rid, area_id, network_mask, fr, network, start_wait=0.3
+    ):
         super(PWOSPFController, self).__init__()
         self.sw = sw
+        self.address = address
+        self.rid = rid
+        self.area_id = area_id
+        self.mask = network_mask
         self.start_wait = start_wait  # time to wait for the controller to be listenning
-        self.iface = sw.intfs[0].name  # is this interface 0 or 1?
+        self.iface = sw.intfs[1].name  # 0 is loopback
         self.network = network
         self.routingTable = {sw.name: []}
         self.stop_event = Event()
@@ -35,11 +41,10 @@ class PWOSPFController(Thread):
             self.routingTable[node] = {}
 
         # for the future
-
         # for node in nodes:
         #     for node2 in nodes:
         #         if node != node2:
-        #             self.routingTable[node][node2] = INFINITE
+        #             self.routingTable[node][node2] = float("inf")
         #         else:
         #             self.routingTable[node][node] = 0
 
@@ -47,6 +52,7 @@ class PWOSPFController(Thread):
         #     if (me, node) in links or (node, me) in links:
         #         self.routingTable[me][node] = 1
 
+        # complete topology from mininet
         for node in nodes:
             self.routingTable[node][node] = 0
 
@@ -71,13 +77,13 @@ class PWOSPFController(Thread):
                 dist[node] = 1
                 prev[node] = me
             else:
-                dist[node] = INFINITE
+                dist[node] = float("inf")
                 prev[node] = None
 
         dist[me] = 0
 
         while len(unvisited) > 0:
-            mininum = INFINITE
+            mininum = float("inf")
             checking = None
             for node in unvisited:
                 if dist[node] <= mininum:
@@ -85,65 +91,16 @@ class PWOSPFController(Thread):
                     mininum = dist[node]
 
             unvisited.remove(checking)
-            # node[0] is the name
-            # node[1] is the distance
             for node, distance in self.routingTable[checking].items():
-                print(node, distance)
                 if node in unvisited:
                     new_route = dist[checking] + distance
                     if new_route < dist[node]:
-                        print("we in it:", node, new_route, dist[node])
+                        print("new best route:", node, new_route, dist[node])
                         dist[node] = new_route
                         prev[node] = checking
 
         print(dist)
         print(prev)
-
-        # me = self.sw.name
-        # links = network.topo.links()
-        # nodes = network.topo.nodes()
-
-        # distance_dic = {}
-        # distance_dic[me] = 0
-        # prev_hop = {}
-        # for node in nodes:
-        #     if (node, me) in links or (me, node) in links:
-        #         distance_dic[node] = 1
-        #         prev_hop[node] = me
-        #     else:
-        #         distance_dic[node] = INFINITE
-        #         prev_hop[node] = None
-
-        # checked_nodes = set()
-        # checked_nodes.add(me)
-
-        # while checked_nodes != set(nodes):
-        #     min_distance_node = None
-        #     for key in distance_dic:
-        #         if key not in checked_nodes:
-        #             # find the minimum one, how?
-        #             if (
-        #                 min_distance_node is None
-        #                 or distance_dic[key] < distance_dic[min_distance_node]
-        #             ):
-        #                 min_distance_node = key
-        #     checked_nodes.add(min_distance_node)
-        #     for edge in links:
-        #         if min_distance_node in edge:
-        #             neighbour = edge[0] if edge[0] != min_distance_node else edge[1]
-        #             if neighbour not in checked_nodes:
-        #                 if (
-        #                     distance_dic[neighbour] + 1
-        #                     < distance_dic[min_distance_node]
-        #                 ):
-        #                     distance_dic[min_distance_node] = distance_dic[
-        #                         neighbour + 1
-        #                     ]
-        #                     prev_hop[min_distance_node] = neighbour
-
-        # print(distance_dic)
-        # print(prev_hop)
-        # return prev_hop
 
     def addForwardingRules(self, fr):
         for entry in fr:
@@ -164,13 +121,14 @@ class PWOSPFController(Thread):
         self.send(pkt)
 
     def handlePkt(self, pkt):
-        # pkt.show2()
+        pkt.show2()
         assert (
             CPUMetadata in pkt
         ), "Should only receive packets from switch with special header"
 
         # Ignore packets that the CPU sends:
-        # if pkt[CPUMetadata].fromCpu == 1: return
+        if pkt[CPUMetadata].fromCPU == 1:
+            return
 
         if PWOSPF_HEADER in pkt:
             # print(pkt[PWOSPF_HEADER].type)
@@ -180,10 +138,23 @@ class PWOSPFController(Thread):
             elif pkt[PWOSPF_HEADER].type == OSPF_LSU:
                 self.handlePWOSPFLSU(pkt)
 
+    def createHelloPacket(self):
+        hello = (
+            Ether(dst="ff:ff:ff:ff:ff:ff")
+            / CPUMetadata(fromCPU=1)
+            / IP(src=self.address, dst=ALLSPFRouters)
+            / PWOSPF_HEADER(
+                type=1, packet_length=32, router_ID=self.rid, aread_ID=self.area_id
+            )
+            / PWOSPF_HELLO(network_mask=self.mask)
+        )
+
+        return hello
+
     def send(self, *args, **override_kwargs):
         pkt = args[0]
         assert CPUMetadata in pkt, "Controller must send packets with special header"
-        pkt[CPUMetadata].fromCpu = 1
+        pkt[CPUMetadata].fromCPU = 1
         kwargs = dict(iface=self.iface, verbose=False)
         kwargs.update(override_kwargs)
         sendp(*args, **kwargs)
@@ -195,14 +166,8 @@ class PWOSPFController(Thread):
         super(PWOSPFController, self).start(*args, **kwargs)
         time.sleep(self.start_wait)
 
-        hello = (
-            Ether()
-            / CPUMetadata()
-            / IP(dst="10.0.0.2")
-            / PWOSPF_HEADER()
-            / PWOSPF_HELLO()
-        )
-        # self.send(hello)
+        hello = self.createHelloPacket()
+        self.send(hello)
         # hello.show2()
 
     def join(self, *args, **kwargs):

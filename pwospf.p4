@@ -6,15 +6,18 @@
 *********************** H E A D E R S  ***********************************
 *************************************************************************/
 
-/* Easier to use IPv4 and PWOSPF constants */
-const bit<16> TYPE_IPV4 = 0x800;
-const bit<8>  TYPE_PWOSPF  = 0x59; // 89
-
 /* Type definitions */
+typedef bit<9>  port_t;
 typedef bit<9>  egressSpec_t;
 typedef bit<48> macAddr_t;
 typedef bit<32> ip4Addr_t;
 typedef bit<16> mcastGrp_t;
+
+/* Easier to use IPv4 and PWOSPF constants */
+const bit<16> TYPE_IPV4 = 0x800;
+const bit<8>  TYPE_PWOSPF  = 0x59; // 89
+const port_t CPU_PORT           = 0x1; // 1
+
 
 // SZ: 8bits = 1
 #define ETH_SZ 14
@@ -127,9 +130,15 @@ control MyIngress(inout headers hdr,
         decr_ttl();
     }
 
-    // action forward_to_switch(egressSpec_t port) {
-    //     set_egr(port);
-    // }
+    action set_mgid(mcastGrp_t mgid) {
+        standard_metadata.mcast_grp = mgid;
+        decr_ttl();
+    }
+
+    action send_to_CPU() {
+        standard_metadata.egress_spec = CPU_PORT;
+    }
+
     table ipv4_lpm {
         key = {
             hdr.ipv4.dstAddr: lpm;
@@ -137,34 +146,24 @@ control MyIngress(inout headers hdr,
         actions = {
             drop;
             ipv4_forward;
+            set_mgid;
             NoAction;
         }
         size = 1024;
         default_action = NoAction();
     }
 
-    // table switch_forward {
-    //     key = {
-    //         hdr.ipv4.dstAddr: lpm;
-    //     }
-    //     actions = {
-    //         forward_to_switch;
-    //         NoAction;
-    //     }
-    //     size = 1024;
-    //     default_action = NoAction();
-    // }
-
     apply {
-        if (hdr.ipv4.isValid() && hdr.ipv4.ttl > 0) {
-          if (ipv4_lpm.apply().hit) {
-            // everything fine
-          }
-          else {
-            // we need to go to another router
-            // switch_forward.apply();
-          };
+        if (hdr.pwospf.isValid() && standard_metadata.ingress_port != CPU_PORT) {
+            send_to_CPU();
         }
+        else if (hdr.ipv4.isValid() && hdr.ipv4.ttl > 0) {
+            ipv4_lpm.apply();
+        }
+        else {
+            drop();
+        }
+
     }
 }
 

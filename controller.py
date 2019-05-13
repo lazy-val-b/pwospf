@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from threading import Thread, Event
+from threading import Thread, Event, Timer
 from scapy.all import sendp
 from scapy.all import Packet, Ether, IP, ARP
 from async_sniff import sniff
@@ -8,11 +8,12 @@ from pwospf_protocoll import *
 import time
 import pdb
 
+
 PWOSPF_OP_HELLO   = 0x0001
 PWOSPF_OP_LSU = 0x0004
 
 class PWOSPFController(Thread):
-    def __init__(self, sw, chost, helloint, mask, areaID, net, start_wait=0.3):
+    def __init__(self, sw, chost, helloint, mask, areaID, net, rid=0, start_wait=0.3, ):
         super(PWOSPFController, self).__init__()
         self.sw = sw
         self.start_wait = start_wait # time to wait for the controller to be listenning
@@ -24,11 +25,13 @@ class PWOSPFController(Thread):
         self.db = {
             'neighbours': [],
             'helloInt': helloint,
-            'routerID': sw.intfs[0].IP(),
+            'routerID': rid,
             'areaID': areaID,
             'mask': mask
         }
-        self.dijkstra(net.topo.nodes(), net.topo.links(), self.sw.name)
+        prev_dict = self.dijkstra(net.topo.nodes(), net.topo.links(), self.sw.name)
+        self.setupTopo(prev_dict, net, self.sw.name)
+        self.setupMulticast(10)
 
 
     def dijkstra(self, V, E, me):
@@ -63,9 +66,20 @@ class PWOSPFController(Thread):
                             D[neighbour] = D[min_distance_node] + 1
                             p[neighbour] = min_distance_node
 
-        print(D)
-        print(p)
         return p
+
+    def setupTopo(self, prev_dict, net, me):
+        for key in prev_dict:
+            if key != me:
+                prev_node_name = prev_dict[key]
+                node = net.get(key)
+                if prev_node_name != me:
+                    self.addMacAddr(node.MAC(), node.IP(), 4)
+                else:
+                    if not 'isSwitch' in net.topo.nodeInfo(key):
+                        self.addMacAddr(node.MAC(), node.IP(), net.topo.linkInfo(me, key)['port2'])
+
+
 
     def addMacAddr(self, mac, ip, port):
         # Don't re-add the mac-port mapping if we already have it:
@@ -78,6 +92,14 @@ class PWOSPFController(Thread):
                                         'port': port})
         self.port_for_mac[mac] = port
 
+    def setupMulticast(self, mgid):
+        self.sw.insertTableEntry(table_name='MyIngress.ipv4_lpm',
+                            match_fields={'hdr.ipv4.dstAddr': [ALLSPFRouters, 32]},
+                            action_name='MyIngress.set_mgid',
+                            action_params={'mgid': mgid})
+
+        self.sw.addMulticastGroup(mgid=mgid, ports=range(2, 5))
+
     def handleArpReply(self, pkt):
         # self.addMacAddr(pkt[ARP].hwsrc, pkt[CPUMetadata].srcPort)
         self.send(pkt)
@@ -88,8 +110,17 @@ class PWOSPFController(Thread):
         self.send(pkt)
 
     def handlePkt(self, pkt):
-        # pkt.show2()
-        assert PWOSPFHeader in pkt, "Should only receive packets from switch with special header"
+        if PWOSPFHeader in pkt:
+            if not (pkt['PWOSPFHeader'].routerID == self.db['routerID']):
+                print pkt['PWOSPFHeader'].Type
+                if (pkt['PWOSPFHeader'].Type == 1): # we got a hello
+                    print 'hello!'
+                elif (pkt['PWOSPFHeader'].Type == 4): # we got a LSU
+                    print 'lsu!'
+                else:
+                    print 'Invalid type, dropperino'
+        else:
+            assert PWOSPFHeader in pkt, "Should only receive packets from switch with special header"
 
         # Ignore packets that the CPU sends:
         # if pkt[PWOSPFHeader].fromCpu == 1: return
@@ -103,7 +134,6 @@ class PWOSPFController(Thread):
     def send(self, *args, **override_kwargs):
         pkt = args[0]
         assert PWOSPFHeader in pkt, "Controller must send packets with special header"
-        # pkt[CPUMetadata].fromCpu = 1
         kwargs = dict(iface=self.iface, verbose=False)
         kwargs.update(override_kwargs)
         sendp(*args, **kwargs)
@@ -114,20 +144,21 @@ class PWOSPFController(Thread):
     def start(self, *args, **kwargs):
         super(PWOSPFController, self).start(*args, **kwargs)
         time.sleep(self.start_wait)
-        self.helloPacket()
+        self.sendRegularlyHello()
 
     def join(self, *args, **kwargs):
+        print 'join called for' + str(self.db['routerID'])
         self.stop_event.set()
         super(PWOSPFController, self).join(*args, **kwargs)
 
+    def sendRegularlyHello(self):
+        Timer(self.db['helloInt'], self.helloPacket).start()
+    
+
     def helloPacket(self):
-        f = Ether()/IP(dst=ALLSPFRouters)
+        f = Ether(dst='ff:ff:ff:ff:ff:ff')/IP(dst=ALLSPFRouters)
 
-        # convert ip to hex representation
-        splitIP = self.db['routerID'].split('.')
-        routerID = '{:02X}{:02X}{:02X}{:02X}'.format(*map(int, splitIP))
-
-        g = f/PWOSPFHeader(areaID=self.db['areaID'])
+        g = f/PWOSPFHeader(routerID=self.db['routerID'], areaID=self.db['areaID'])
 
         h = g/PWOSPFHello(HelloInt=self.db['helloInt'])
         self.send(h)

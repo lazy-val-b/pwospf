@@ -13,7 +13,7 @@ PWOSPF_OP_HELLO   = 0x0001
 PWOSPF_OP_LSU = 0x0004
 
 class PWOSPFController(Thread):
-    def __init__(self, sw, chost, helloint, mask, areaID, net, rid=0, start_wait=0.3, ):
+    def __init__(self, sw, chost, helloint, mask, areaID, net, rid=0, start_wait=0.3 ):
         super(PWOSPFController, self).__init__()
         self.sw = sw
         self.start_wait = start_wait # time to wait for the controller to be listenning
@@ -74,7 +74,8 @@ class PWOSPFController(Thread):
                 prev_node_name = prev_dict[key]
                 node = net.get(key)
                 if prev_node_name != me:
-                    self.addMacAddr(node.MAC(), node.IP(), 4)
+                    if not ('isSwitch' in net.topo.nodeInfo(key) or 'isSwitch' in net.topo.nodeInfo(prev_node_name)):
+                        self.addMacAddr(node.MAC(), node.IP(), net.topo.linkInfo(prev_node_name, key)['port2'])
                 else:
                     if not 'isSwitch' in net.topo.nodeInfo(key):
                         self.addMacAddr(node.MAC(), node.IP(), net.topo.linkInfo(me, key)['port2'])
@@ -98,7 +99,8 @@ class PWOSPFController(Thread):
                             action_name='MyIngress.set_mgid',
                             action_params={'mgid': mgid})
 
-        self.sw.addMulticastGroup(mgid=mgid, ports=range(2, 5))
+        # controller is at port 1, so we can skip that port
+        self.sw.addMulticastGroup(mgid=mgid, ports=range(2, len(self.sw.ports)))
 
     def handleArpReply(self, pkt):
         # self.addMacAddr(pkt[ARP].hwsrc, pkt[CPUMetadata].srcPort)
@@ -112,8 +114,9 @@ class PWOSPFController(Thread):
     def handlePkt(self, pkt):
         if PWOSPFHeader in pkt:
             if not (pkt['PWOSPFHeader'].routerID == self.db['routerID']):
-                print pkt['PWOSPFHeader'].Type
                 if (pkt['PWOSPFHeader'].Type == 1): # we got a hello
+                    if self.db['routerID'] == 2:
+                        print "you are: " + str(pkt['PWOSPFHeader'].routerID)
                     print 'hello!'
                 elif (pkt['PWOSPFHeader'].Type == 4): # we got a LSU
                     print 'lsu!'
@@ -139,20 +142,24 @@ class PWOSPFController(Thread):
         sendp(*args, **kwargs)
 
     def run(self):
-        sniff(iface=self.iface, prn=self.handlePkt, stop_event=self.stop_event)
+        Thread(target=self.runSniff, args=[self.iface, self.handlePkt, self.stop_event]).start()
+        Thread(target=self.sendRegularlyHello).start()
+        # self.sendRegularlyHello()
+
+    def runSniff(self, iface, handlePkt, stop_event):
+        sniff(iface=iface, prn=handlePkt, stop_event=stop_event)
 
     def start(self, *args, **kwargs):
         super(PWOSPFController, self).start(*args, **kwargs)
         time.sleep(self.start_wait)
-        self.sendRegularlyHello()
 
     def join(self, *args, **kwargs):
-        print 'join called for' + str(self.db['routerID'])
         self.stop_event.set()
         super(PWOSPFController, self).join(*args, **kwargs)
 
     def sendRegularlyHello(self):
-        Timer(self.db['helloInt'], self.helloPacket).start()
+        self.helloPacket()
+        Timer(self.db['helloInt'], self.sendRegularlyHello).start()
     
 
     def helloPacket(self):

@@ -13,9 +13,75 @@ OSPF_LSU = 4
 ALLSPFRouters = "224.0.0.5"
 
 
+class PWOSPFSniff(Thread):
+    def __init__(self, sw, controller):
+        super(PWOSPFSniff, self).__init__()
+        self.sw = sw
+        self.iface = sw.intfs[1].name  # 0 is loopback
+        self.stop_event = Event()
+        self.controller = controller
+
+    def run(self):
+        if self.sw.name == "s2":
+            print("I'm s2: sniffing")
+
+        elif self.sw.name == "s3":
+            print("I'm s3: sniffing")
+
+        elif self.sw.name == "s1":
+            print("I'm s1: sniffing")
+
+        sniff(iface=self.iface, prn=self.handlePkt, stop_event=self.stop_event)
+
+    def handlePWOSPFHello(self, pkt):
+        # pkt.show2()
+        # self.addMacAddr(pkt[ARP].hwsrc, pkt[CPUMetadata].srcPort)
+        # self.send(pkt)  # why send?
+        if self.sw.name == "s2":
+            print("I'm s2: ")
+            pkt.show2()
+        # elif self.sw.name == "s3":
+        #     print("I'm s3: ")
+        #     pkt.show2()
+        # elif self.sw.name == "s1":
+        #     print("I'm s1: ")
+        #     pkt.show2()
+
+        return
+
+    def handlePWOSPFLSU(self, pkt):
+        # self.addMacAddr(pkt[ARP].hwsrc, pkt[CPUMetadata].srcPort)
+        self.send(pkt)
+
+    def handlePkt(self, pkt):
+        if self.sw.name == "s2":
+            print("I'm s2: ")
+            pkt.show2()
+            # elif self.sw.name == "s3":
+            #     print("I'm s3: ")
+            #     pkt.show2()
+            # elif self.sw.name == "s1":
+            #     print("I'm s1: ")
+            #     pkt.show2()
+            self.controller.updateRouting(pkt)
+
+        # assert (
+        #     CPUMetadata in pkt
+        # ), "Should only receive packets from switch with special header"
+
+        # if PWOSPF_HEADER in pkt:
+        #     # print(pkt[PWOSPF_HEADER].type)
+        #     if pkt[PWOSPF_HEADER].type == OSPF_HELLO:
+        #         print("PWOSPF_HELLO found")
+        #         self.handlePWOSPFHello(pkt)
+        #     elif pkt[PWOSPF_HEADER].type == OSPF_LSU:
+        #         print("PWOSPF_LSU found")
+        #         self.handlePWOSPFLSU(pkt)
+
+
 class PWOSPFController(Thread):
     def __init__(
-        self, sw, address, rid, area_id, network_mask, fr, network, start_wait=0.3
+        self, sw, address, rid, area_id, network_mask, fr, network, start_wait=5
     ):
         super(PWOSPFController, self).__init__()
         self.sw = sw
@@ -31,6 +97,7 @@ class PWOSPFController(Thread):
         self.addForwardingRules(fr)
         self.initialise_routing_table()
         self.computeDijkstra(network)
+        self.setupMulticast(10)
 
     def initialise_routing_table(self):
         me = self.sw.name
@@ -60,7 +127,7 @@ class PWOSPFController(Thread):
             self.routingTable[link[0]][link[1]] = 1
             self.routingTable[link[1]][link[0]] = 1
 
-        print(self.routingTable)
+        # print(self.routingTable)
 
     def computeDijkstra(self, network):
 
@@ -95,12 +162,21 @@ class PWOSPFController(Thread):
                 if node in unvisited:
                     new_route = dist[checking] + distance
                     if new_route < dist[node]:
-                        print("new best route:", node, new_route, dist[node])
+                        # print("new best route:", node, new_route, dist[node])
                         dist[node] = new_route
                         prev[node] = checking
 
-        print(dist)
-        print(prev)
+        # print(dist)
+        # print(prev)
+
+    def setupMulticast(self, mgid):
+        self.sw.insertTableEntry(
+            table_name="MyIngress.ipv4_lpm",
+            match_fields={"hdr.ipv4.dstAddr": [ALLSPFRouters, 32]},
+            action_name="MyIngress.set_mgid",
+            action_params={"mgid": mgid},
+        )
+        self.sw.addMulticastGroup(mgid=mgid, ports=range(2, len(self.sw.ports)))
 
     def addForwardingRules(self, fr):
         for entry in fr:
@@ -110,33 +186,6 @@ class PWOSPFController(Thread):
                 action_name="MyIngress.ipv4_forward",
                 action_params={"dstAddr": entry[1], "port": entry[2]},
             )
-
-    def handlePWOSPFHello(self, pkt):
-        # pkt.show2()
-        # self.addMacAddr(pkt[ARP].hwsrc, pkt[CPUMetadata].srcPort)
-        self.send(pkt)  # why send?
-
-    def handlePWOSPFLSU(self, pkt):
-        # self.addMacAddr(pkt[ARP].hwsrc, pkt[CPUMetadata].srcPort)
-        self.send(pkt)
-
-    def handlePkt(self, pkt):
-        pkt.show2()
-        assert (
-            CPUMetadata in pkt
-        ), "Should only receive packets from switch with special header"
-
-        # Ignore packets that the CPU sends:
-        if pkt[CPUMetadata].fromCPU == 1:
-            return
-
-        if PWOSPF_HEADER in pkt:
-            # print(pkt[PWOSPF_HEADER].type)
-
-            if pkt[PWOSPF_HEADER].type == OSPF_HELLO:
-                self.handlePWOSPFHello(pkt)
-            elif pkt[PWOSPF_HEADER].type == OSPF_LSU:
-                self.handlePWOSPFLSU(pkt)
 
     def createHelloPacket(self):
         hello = (
@@ -151,6 +200,11 @@ class PWOSPFController(Thread):
 
         return hello
 
+    def updateRouting(self, rt):
+        if self.sw.name == "s2":
+            print("I'm s2: ")
+            print("new routing", rt.show2())
+
     def send(self, *args, **override_kwargs):
         pkt = args[0]
         assert CPUMetadata in pkt, "Controller must send packets with special header"
@@ -160,15 +214,16 @@ class PWOSPFController(Thread):
         sendp(*args, **kwargs)
 
     def run(self):
-        sniff(iface=self.iface, prn=self.handlePkt, stop_event=self.stop_event)
+        sniffer = PWOSPFSniff(self.sw, self)
+        sniffer.start()
+        while True:
+            hello = self.createHelloPacket()
+            self.send(hello)
+            time.sleep(10)
 
     def start(self, *args, **kwargs):
         super(PWOSPFController, self).start(*args, **kwargs)
         time.sleep(self.start_wait)
-
-        hello = self.createHelloPacket()
-        self.send(hello)
-        # hello.show2()
 
     def join(self, *args, **kwargs):
         self.stop_event.set()

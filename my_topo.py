@@ -21,7 +21,14 @@ class TwoSwitchTopo(Topo):
 
         self.addLink(switch1, switch2, port1=2, port2=2)
 
-        # switch3 = self.addSwitch("s3")
+        switch3 = self.addSwitch("s3")
+        cpu_3 = self.addHost("c3", ip="10.0.0.5", mac="00:00:00:00:00:05")
+        host3_1 = self.addHost("h3", ip="10.0.0.6", mac="00:00:00:00:00:06")
+        self.addLink(host3_1, switch3, port2=3)
+        self.addLink(cpu_3, switch3, port2=1)
+
+        self.addLink(switch2, switch3, port1=4, port2=4)
+
         # self.addLink(switch1, switch3, port1=4, port2=4)
         # self.addLink(switch2, switch3, port1=5, port2=5)
         # host3_1 = self.addHost("h3")

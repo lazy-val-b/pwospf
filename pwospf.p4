@@ -32,6 +32,7 @@ const port_t CPU_PORT           = 0x1;
 typedef bit<9>  egressSpec_t;
 typedef bit<48> macAddr_t;
 typedef bit<32> ip4Addr_t;
+typedef bit<16> mcastGrp_t;
 
 header ethernet_t {
     macAddr_t dstAddr;
@@ -186,7 +187,7 @@ control MyIngress(inout headers hdr,
     
     action ipv4_forward(macAddr_t dstAddr, egressSpec_t port) {
         standard_metadata.egress_spec = port;
-        // hdr.ethernet.srcAddr = hdr.ethernet.dstAddr; // is this correct?
+        hdr.ethernet.srcAddr = hdr.ethernet.dstAddr; // is this correct?
         hdr.ethernet.dstAddr = dstAddr;
         hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
     }
@@ -203,6 +204,10 @@ control MyIngress(inout headers hdr,
         hdr.cpu_metadata.setInvalid();
     }
 
+     action set_mgid(mcastGrp_t mgid) {
+        standard_metadata.mcast_grp = mgid;
+}
+
     action send_to_cpu() {
         cpu_meta_encap();
         standard_metadata.egress_spec = CPU_PORT;
@@ -215,6 +220,7 @@ control MyIngress(inout headers hdr,
         }
         actions = {
             ipv4_forward;
+            set_mgid;
             drop;
         }
         size = 1024;
@@ -226,11 +232,11 @@ control MyIngress(inout headers hdr,
         if (standard_metadata.ingress_port == CPU_PORT){
             cpu_meta_decap();
             ipv4_lpm.apply();
-        }
+        } 
         else if (hdr.ospf_header.isValid() && standard_metadata.ingress_port != CPU_PORT) {
             send_to_cpu();
         }
-        else{
+        else if (hdr.ethernet.isValid()){
             ipv4_lpm.apply();
         }
 
@@ -240,7 +246,30 @@ control MyIngress(inout headers hdr,
 control MyEgress(inout headers hdr,
                  inout metadata meta,
                  inout standard_metadata_t standard_metadata) {
-    apply { }
+    action rewrite_dst(macAddr_t mac, ip4Addr_t ip) {
+        hdr.ethernet.dstAddr = mac;
+        hdr.ipv4.dstAddr = ip;
+    }
+    action drop() {
+        mark_to_drop();
+    }
+    table send_frame {
+        key = {
+            standard_metadata.egress_port: exact;
+        }
+        actions = {
+            rewrite_dst;
+            drop;
+            NoAction;
+        }
+        size = 256;
+        default_action = NoAction();
+    }
+    apply {
+        if (hdr.ipv4.isValid()) {
+          send_frame.apply();
+        }
+    }
 }
 
 control MyComputeChecksum(inout headers  hdr, inout metadata meta) {
@@ -254,7 +283,6 @@ control MyComputeChecksum(inout headers  hdr, inout metadata meta) {
                 hdr.ipv4.identification,
                 hdr.ipv4.flags,
                 hdr.ipv4.fragOffset,
-                hdr.ipv4.ttl,
                 hdr.ipv4.protocol,
                 hdr.ipv4.srcAddr,
                 hdr.ipv4.dstAddr },

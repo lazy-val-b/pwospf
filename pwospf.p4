@@ -174,31 +174,36 @@ control MyIngress(inout headers hdr,
 control MyEgress(inout headers hdr,
                  inout metadata meta,
                  inout standard_metadata_t standard_metadata) {
-    action rewrite_dst(macAddr_t mac, ip4Addr_t ip) {
-        hdr.ethernet.dstAddr = mac;
-        hdr.ipv4.dstAddr = ip;
-    }
-    action drop() {
-        mark_to_drop();
-    }
-    table send_frame {
-        key = {
-            standard_metadata.egress_port: exact;
-        }
-        actions = {
-            rewrite_dst;
-            drop;
-            NoAction;
-        }
-        size = 256;
-        default_action = NoAction();
-    }
-    apply {
-        if (hdr.ipv4.isValid()) {
-          send_frame.apply();
-        }
-    }
+    apply { }
 }
+// control MyEgress(inout headers hdr,
+//                  inout metadata meta,
+//                  inout standard_metadata_t standard_metadata) {
+//     action rewrite_dst(macAddr_t mac, ip4Addr_t ip) {
+//         hdr.ethernet.dstAddr = mac;
+//         hdr.ipv4.dstAddr = ip;
+//     }
+//     action drop() {
+//         mark_to_drop();
+//     }
+//     table send_frame {
+//         key = {
+//             standard_metadata.egress_port: exact;
+//         }
+//         actions = {
+//             rewrite_dst;
+//             drop;
+//             NoAction;
+//         }
+//         size = 256;
+//         default_action = NoAction();
+//     }
+//     apply {
+//         if (hdr.ipv4.isValid()) {
+//           send_frame.apply();
+//         }
+//     }
+// }
 
 /*************************************************************************
 *************   C H E C K S U M    C O M P U T A T I O N   **************

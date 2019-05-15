@@ -100,7 +100,7 @@ class PWOSPFController(Thread):
                             action_params={'mgid': mgid})
 
         # controller is at port 1, so we can skip that port
-        self.sw.addMulticastGroup(mgid=mgid, ports=range(2, len(self.sw.ports)))
+        self.sw.addMulticastGroup(mgid=mgid, ports=range(2, 6))
 
     def handleArpReply(self, pkt):
         # self.addMacAddr(pkt[ARP].hwsrc, pkt[CPUMetadata].srcPort)
@@ -115,8 +115,8 @@ class PWOSPFController(Thread):
         if PWOSPFHeader in pkt:
             if not (pkt['PWOSPFHeader'].routerID == self.db['routerID']):
                 if (pkt['PWOSPFHeader'].Type == 1): # we got a hello
-                    if self.db['routerID'] == 2:
-                        print "you are: " + str(pkt['PWOSPFHeader'].routerID)
+                    # if self.db['routerID'] == 2:
+                    #     print pkt['PWOSPFHeader'].routerID
                     print 'hello!'
                 elif (pkt['PWOSPFHeader'].Type == 4): # we got a LSU
                     print 'lsu!'
@@ -144,7 +144,6 @@ class PWOSPFController(Thread):
     def run(self):
         Thread(target=self.runSniff, args=[self.iface, self.handlePkt, self.stop_event]).start()
         Thread(target=self.sendRegularlyHello).start()
-        # self.sendRegularlyHello()
 
     def runSniff(self, iface, handlePkt, stop_event):
         sniff(iface=iface, prn=handlePkt, stop_event=stop_event)

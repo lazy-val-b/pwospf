@@ -3,7 +3,7 @@ from scapy.all import sendp
 from scapy.all import Packet, Ether, IP, ARP
 from async_sniff import sniff
 from cpu_metadata import CPUMetadata
-from pwospf_protocol import PWOSPF_HEADER, PWOSPF_HELLO, PWOSPF_LSU
+from pwospf_protocol import PWOSPF_HEADER, PWOSPF_HELLO, PWOSPF_LSU, PWOSPF_ADV
 import time
 
 import pdb
@@ -39,6 +39,7 @@ class PWOSPFController(Thread):
         self.routingTable = {}
         self.links = set()
         self.nodes = set()
+        self.neighbours = set()
         self.forwarding_ports = {}
         self.stop_event = Event()
         self.addForwardingRules(fr)
@@ -56,31 +57,17 @@ class PWOSPFController(Thread):
             self.links.add((me, entry[0]))
             self.nodes.add(entry[0])
             self.forwarding_ports[entry[0]] = entry[2]
+            self.neighbours.add(entry[0])
 
         for node in self.nodes:
             self.routingTable[node] = {}
 
-        # for the future
-        # for node in nodes:
-        #     for node2 in nodes:
-        #         if node != node2:
-        #             self.routingTable[node][node2] = float("inf")
-        #         else:
-        #             self.routingTable[node][node] = 0
-
-        # for node in nodes:
-        #     if (me, node) in links or (node, me) in links:
-        #         self.routingTable[me][node] = 1
-
-        # complete topology from mininet
         for node in self.nodes:
             self.routingTable[node][node] = 0
 
         for link in self.links:
             self.routingTable[link[0]][link[1]] = 1
             self.routingTable[link[1]][link[0]] = 1
-
-        print(self.routingTable)
 
     def computeDijkstra(self):
 
@@ -150,16 +137,29 @@ class PWOSPFController(Thread):
 
         self.send(hello)
 
-    def sendLSUPacket(self):
-        lsu = (
-            Ether(dst="ff:ff:ff:ff:ff:ff")
-            / CPUMetadata(fromCPU=1)
-            / IP(src=self.controller_address, dst=ALLSPFRouters)
-            / PWOSPF_HEADER(
-                type=4, packet_length=32, router_ID=self.rid, aread_ID=self.area_id
-            )
-            / PWOSPF_LSU()
-        )
+    def sendLSUPackets(self):
+        if self.sw.name == "s2":
+
+            for node in self.neighbours:
+                for route in self.routingTable[self.controller_address]:
+                    lsu = (
+                        Ether(dst="ff:ff:ff:ff:ff:ff")
+                        / CPUMetadata(fromCPU=1)
+                        / IP(src=self.controller_address, dst=node)
+                        / PWOSPF_HEADER(
+                            type=4,
+                            packet_length=32,
+                            router_ID=self.rid,
+                            aread_ID=self.area_id,
+                        )
+                        / PWOSPF_LSU()
+                        / PWOSPF_ADV(
+                            subnet=0x0A000005,  # should put the converted route here
+                            mask=0xFFFFFFFF,
+                            router_id=self.rid,
+                        )
+                    )
+                    self.send(lsu)
 
     def sendRegularlyHello(self):
         self.sendHelloPacket()
@@ -172,34 +172,30 @@ class PWOSPFController(Thread):
         self.routingTable[new_entry] = {}
         self.routingTable[new_entry][self.controller_address] = 1
         print(self.routingTable)
+        self.sendLSUPackets()
 
     def handlePWOSPFHello(self, pkt):
-        if self.sw.name == "s2":
-            source = str(pkt[IP].src)
-            self.nodes.add(source)
-            self.links.add((self.controller_address, source))
-            if source not in self.routingTable:
-                self.updateRoutingTable(source)
-                self.forwarding_ports[source] = pkt[CPUMetadata].srcPort
-                print(self.forwarding_ports)
-                self.computeDijkstra()
-                print("new entry, recomputing dijkstra:")
-                print(self.routingTable)
-
-        return
+        source = str(pkt[IP].src)
+        self.nodes.add(source)
+        self.links.add((self.controller_address, source))
+        if source not in self.routingTable:
+            self.updateRoutingTable(source)
+            self.forwarding_ports[source] = pkt[CPUMetadata].srcPort
+            print(self.forwarding_ports)
+            self.computeDijkstra()
+            print("new entry, recomputing dijkstra:")
+            print(self.routingTable)
 
     def handlePWOSPFLSU(self, pkt):
-        # self.addMacAddr(pkt[ARP].hwsrc, pkt[CPUMetadata].srcPort)
-        self.send(pkt)
+        print("NEW LSU")
+        pkt.show2()
 
     def handlePkt(self, pkt):
-        if self.sw.name == "s2":
-            if PWOSPF_HEADER in pkt:
-                # print(pkt[PWOSPF_HEADER].type)
-                if pkt[PWOSPF_HEADER].type == OSPF_HELLO:
-                    self.handlePWOSPFHello(pkt)
-                elif pkt[PWOSPF_HEADER].type == OSPF_LSU:
-                    self.handlePWOSPFLSU(pkt)
+        if PWOSPF_HEADER in pkt:
+            if pkt[PWOSPF_HEADER].type == OSPF_HELLO:
+                self.handlePWOSPFHello(pkt)
+            elif pkt[PWOSPF_HEADER].type == OSPF_LSU:
+                self.handlePWOSPFLSU(pkt)
 
     def runSniff(self):
         sniff(iface=self.iface, prn=self.handlePkt, stop_event=self.stop_event)

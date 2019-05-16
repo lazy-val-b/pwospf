@@ -37,10 +37,16 @@ class PWOSPF_LSU(Packet):
         ShortField("sequence", 0),
         ShortField("ttl", 1),
         IntField("adv_number", 1),
-        IntField("adv", 0),
+        # IntField("adv", 0), this should be modular
     ]
+
+
+class PWOSPF_ADV(Packet):
+    name = "pwospf adv"
+    fields_desc = [IntField("subnet", 0), IntField("mask", 0), IntField("router_id", 0)]
 
 
 bind_layers(IP, PWOSPF_HEADER, proto=TYPE_OSPF)
 bind_layers(PWOSPF_HEADER, PWOSPF_HELLO, type=1)
 bind_layers(PWOSPF_HEADER, PWOSPF_LSU, type=4)
+bind_layers(PWOSPF_LSU, PWOSPF_ADV)

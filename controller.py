@@ -30,7 +30,7 @@ class PWOSPFController(Thread):
             'routerID': rid,
             'areaID': areaID,
             'mask': mask,
-            'lsuint': 5
+            'lsuInt': 30
         }
         prev_dict = self.dijkstra(net.topo.nodes(), net.topo.links(), self.sw.name)
         self.setupTopo(prev_dict, net, self.sw.name)
@@ -106,7 +106,10 @@ class PWOSPFController(Thread):
         self.sw.addMulticastGroup(mgid=mgid, ports=range(2, 6))
 
     def handleHello(self, pkt):
-        # pkt.show2()
+        pkt.show2()
+
+    def handleLSU(self, pkt):
+        pkt.show2()
 
     def handlePkt(self, pkt):
         if PWOSPFHeader in pkt:
@@ -117,7 +120,7 @@ class PWOSPFController(Thread):
                     if (pkt['PWOSPFHeader'].Type == 1): # we got a hello
                         self.handleHello(pkt)
                     elif (pkt['PWOSPFHeader'].Type == 4): # we got a LSU
-                        print 'lsu!'
+                        self.handleLSU(pkt)
                     else:
                         print 'Invalid type, dropperino'
         else:
@@ -133,6 +136,7 @@ class PWOSPFController(Thread):
     def run(self):
         Thread(target=self.runSniff).start()
         Thread(target=self.sendRegularlyHello).start()
+        Thread(target=self.sendRegularlyLSU).start()
 
     def runSniff(self):
         sniff(iface=self.iface, prn=self.handlePkt, stop_event=self.stop_event)
@@ -148,6 +152,10 @@ class PWOSPFController(Thread):
     def sendRegularlyHello(self):
         self.helloPacket()
         Timer(self.db['helloInt'], self.sendRegularlyHello).start()
+
+    def sendRegularlyLSU(self):
+        self.LSUPacket()
+        Timer(self.db['lsuInt'], self.sendRegularlyLSU).start()
     
 
     def helloPacket(self):
@@ -157,3 +165,12 @@ class PWOSPFController(Thread):
 
         h = g/PWOSPFHello(HelloInt=self.db['helloInt'])
         self.send(h)
+
+    def LSUPacket(self):
+        f = Ether(dst='ff:ff:ff:ff:ff:ff')/ CPUMetadata()/IP(src=self.chost.IP(), dst=ALLSPFRouters)
+
+        g = f/PWOSPFHeader(routerID=self.db['routerID'], areaID=self.db['areaID'])
+
+        h = g/PWOSPFLSU()
+        self.send(h)
+

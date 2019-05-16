@@ -41,8 +41,8 @@ class PWOSPFLSU(Packet):
     fields_desc = [ 
                     ShortField("Sequence", 0),
                     ShortField("TTL", 1),
-                    PacketListField("# Advertisements", [], PWOSPFLSA, length_from = lambda p: p.tp_len),
-                    FieldLenField("# Advertisements", None),
+                    PacketListField("Advertisements", [], PWOSPFLSA, count_from=lambda pkt:pkt.NumAdvertisements),
+                    FieldLenField("NumAdvertisements",None,count_of="Advertisements", fmt="B"),
                 ]
 
 bind_layers(Ether, PWOSPFHeader, type=TYPE_PWOSPF_TYPE)

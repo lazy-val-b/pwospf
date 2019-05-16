@@ -17,6 +17,7 @@ typedef bit<16> mcastGrp_t;
 const bit<16> TYPE_IPV4 = 0x800;
 const bit<8>  TYPE_PWOSPF  = 0x59; // 89
 const port_t CPU_PORT           = 0x1; // 1
+const bit<16> TYPE_CPU_METADATA = 0x080a;
 
 
 // SZ: 8bits = 1
@@ -43,6 +44,12 @@ header ipv4_t {
     ip4Addr_t dstAddr;
 }
 
+#define CPU_METADATA_SZ 4
+header cpu_metadata_t {
+    bit<16> origEtherType;
+    bit<16> srcPort;
+}
+
 /* PWOSPF Packet */
 #define PWOSPF_SZ 24
 header pwospf_t {
@@ -62,6 +69,7 @@ struct metadata {
 
 struct headers {
     ethernet_t   ethernet;
+    cpu_metadata_t cpu_metadata;
     ipv4_t       ipv4;
     pwospf_t pwospf;
 }
@@ -82,6 +90,15 @@ parser MyParser(packet_in packet,
     state parse_ethernet {
         packet.extract(hdr.ethernet);
         transition select(hdr.ethernet.etherType) {
+            TYPE_IPV4: parse_ipv4;
+            TYPE_CPU_METADATA: parse_cpu_metadata;
+            default: accept;
+        }
+    }
+
+    state parse_cpu_metadata {
+        packet.extract(hdr.cpu_metadata);
+        transition select(hdr.cpu_metadata.origEtherType) {
             TYPE_IPV4: parse_ipv4;
             default: accept;
         }
@@ -136,6 +153,10 @@ control MyIngress(inout headers hdr,
     }
 
     action send_to_CPU() {
+        hdr.cpu_metadata.setValid();
+        hdr.cpu_metadata.origEtherType = hdr.ethernet.etherType;
+        hdr.cpu_metadata.srcPort = (bit<16>)standard_metadata.ingress_port;
+        hdr.ethernet.etherType = TYPE_CPU_METADATA;
         standard_metadata.egress_spec = CPU_PORT;
     }
 
@@ -158,6 +179,8 @@ control MyIngress(inout headers hdr,
             send_to_CPU();
         }
         else if (hdr.ipv4.isValid() && hdr.ipv4.ttl > 0) {
+            hdr.ethernet.etherType = hdr.cpu_metadata.origEtherType;
+            hdr.cpu_metadata.setInvalid();
             ipv4_lpm.apply();
         }
         else {
@@ -236,6 +259,7 @@ control MyComputeChecksum(inout headers  hdr, inout metadata meta) {
 control MyDeparser(packet_out packet, in headers hdr) {
     apply {
         packet.emit(hdr.ethernet);
+        packet.emit(hdr.cpu_metadata);
         packet.emit(hdr.ipv4);
         packet.emit(hdr.pwospf);
     }

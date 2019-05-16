@@ -5,6 +5,7 @@ from scapy.all import sendp
 from scapy.all import Packet, Ether, IP, ARP
 from async_sniff import sniff
 from pwospf_protocoll import *
+from cpu_metadata import *
 import time
 import pdb
 
@@ -28,7 +29,8 @@ class PWOSPFController(Thread):
             'helloInt': helloint,
             'routerID': rid,
             'areaID': areaID,
-            'mask': mask
+            'mask': mask,
+            'lsuint': 5
         }
         prev_dict = self.dijkstra(net.topo.nodes(), net.topo.links(), self.sw.name)
         self.setupTopo(prev_dict, net, self.sw.name)
@@ -103,22 +105,16 @@ class PWOSPFController(Thread):
         # controller is at port 1, so we can skip that port
         self.sw.addMulticastGroup(mgid=mgid, ports=range(2, 6))
 
-    def handleArpReply(self, pkt):
-        # self.addMacAddr(pkt[ARP].hwsrc, pkt[CPUMetadata].srcPort)
-        self.send(pkt)
-
-
-    def handleArpRequest(self, pkt):
-        self.addMacAddr(pkt[ARP].hwsrc, pkt[CPUMetadata].srcPort)
-        self.send(pkt)
+    def handleHello(self, pkt):
+        pkt.show2()
 
     def handlePkt(self, pkt):
         if PWOSPFHeader in pkt:
             if not (pkt['PWOSPFHeader'].routerID == self.db['routerID']):
                 if (pkt['PWOSPFHeader'].Type == 1): # we got a hello
+                    self.handleHello(pkt)
                     # if self.db['routerID'] == 2:
                     #     print pkt['PWOSPFHeader'].routerID
-                    print 'hello!'
                 elif (pkt['PWOSPFHeader'].Type == 4): # we got a LSU
                     print 'lsu!'
                 else:
@@ -163,7 +159,7 @@ class PWOSPFController(Thread):
     
 
     def helloPacket(self):
-        f = Ether(dst='ff:ff:ff:ff:ff:ff')/IP(dst=ALLSPFRouters)
+        f = Ether(dst='ff:ff:ff:ff:ff:ff')/ CPUMetadata()/IP(src=self.chost.IP(), dst=ALLSPFRouters)
 
         g = f/PWOSPFHeader(routerID=self.db['routerID'], areaID=self.db['areaID'])
 

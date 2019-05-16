@@ -8,8 +8,7 @@ TYPE_CPU_METADATA = 0x080a
 # p4 communicates to cpu, extend metadata
 class CPUMetadata(Packet):
     name = "CPUMetadata"
-    fields_desc = [ ByteField("fromCpu", 0),
-                    ShortField("origEtherType", None),
+    fields_desc = [ ShortField("origEtherType", None),
                     ShortField("srcPort", None)]
 
 bind_layers(Ether, CPUMetadata, type=TYPE_CPU_METADATA)

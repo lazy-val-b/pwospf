@@ -1,7 +1,6 @@
 from scapy.all import *
 import sys, os
 
-TYPE_MYTUNNEL = 0x1212
 TYPE_IPV4 = 0x0800
 TYPE_OSPF = 89
 
@@ -35,17 +34,9 @@ class PWOSPF_HELLO(Packet):
 class PWOSPF_LSU(Packet):
     name = "pwospf lsu"
     fields_desc = [
-        ByteField("version", 0),
-        ByteField("type", 0),
-        ShortField("packet_length", 0),
-        IntField("router_ID", 0),
-        IntField("area_ID", 0),
-        ShortField("checksum", 0),
-        ShortField("autype", 0),
-        LongField("autentication", 0),
         ShortField("sequence", 0),
-        ShortField("ttl", 0),
-        IntField("adv_number", 0),
+        ShortField("ttl", 1),
+        IntField("adv_number", 1),
         IntField("adv", 0),
     ]
 

@@ -294,8 +294,8 @@ control MyComputeChecksum(inout headers  hdr, inout metadata meta) {
 control MyDeparser(packet_out packet, in headers hdr) {
     apply {
         packet.emit(hdr.ethernet);
-        packet.emit(hdr.ipv4);
         packet.emit(hdr.cpu_metadata);
+        packet.emit(hdr.ipv4);
         packet.emit(hdr.udp);
         packet.emit(hdr.ospf_header);
         packet.emit(hdr.ospf_hello);

@@ -23,6 +23,7 @@ class PWOSPFController(Thread):
         self.ifaces = {}
         self.chost = chost
         self.db = {
+            'myNodes': [],
             'neighbours': [],
             'helloInt': helloint,
             'routerID': rid,
@@ -142,11 +143,12 @@ class PWOSPFController(Thread):
         sendp(*args, **kwargs)
 
     def run(self):
-        Thread(target=self.runSniff, args=[self.iface, self.handlePkt, self.stop_event]).start()
+        print "blub"
+        Thread(target=self.runSniff).start()
         Thread(target=self.sendRegularlyHello).start()
 
-    def runSniff(self, iface, handlePkt, stop_event):
-        sniff(iface=iface, prn=handlePkt, stop_event=stop_event)
+    def runSniff(self):
+        sniff(iface=self.iface, prn=self.handlePkt, stop_event=self.stop_event)
 
     def start(self, *args, **kwargs):
         super(PWOSPFController, self).start(*args, **kwargs)

@@ -106,30 +106,22 @@ class PWOSPFController(Thread):
         self.sw.addMulticastGroup(mgid=mgid, ports=range(2, 6))
 
     def handleHello(self, pkt):
-        pkt.show2()
+        # pkt.show2()
 
     def handlePkt(self, pkt):
         if PWOSPFHeader in pkt:
+            # ignore my own packets
             if not (pkt['PWOSPFHeader'].routerID == self.db['routerID']):
-                if (pkt['PWOSPFHeader'].Type == 1): # we got a hello
-                    self.handleHello(pkt)
-                    # if self.db['routerID'] == 2:
-                    #     print pkt['PWOSPFHeader'].routerID
-                elif (pkt['PWOSPFHeader'].Type == 4): # we got a LSU
-                    print 'lsu!'
-                else:
-                    print 'Invalid type, dropperino'
+                # check Area ID, needs to be the same
+                if (pkt['PWOSPFHeader'].areaID == self.db['areaID']):
+                    if (pkt['PWOSPFHeader'].Type == 1): # we got a hello
+                        self.handleHello(pkt)
+                    elif (pkt['PWOSPFHeader'].Type == 4): # we got a LSU
+                        print 'lsu!'
+                    else:
+                        print 'Invalid type, dropperino'
         else:
             assert PWOSPFHeader in pkt, "Should only receive packets from switch with special header"
-
-        # Ignore packets that the CPU sends:
-        # if pkt[PWOSPFHeader].fromCpu == 1: return
-
-        # if ARP in pkt:
-        #     if pkt[ARP].op == ARP_OP_REQ:
-        #         self.handleArpRequest(pkt)
-        #     elif pkt[ARP].op == ARP_OP_REPLY:
-        #         self.handleArpReply(pkt)
 
     def send(self, *args, **override_kwargs):
         pkt = args[0]

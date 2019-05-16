@@ -1,4 +1,4 @@
-from scapy.fields import BitField, ByteField, ShortField, IntField, ByteEnumField, LongField, FieldLenField, PadField, ConditionalField
+from scapy.fields import BitField, ByteField, ShortField, PacketListField, IntField, ByteEnumField, LongField, FieldLenField, PadField, ConditionalField
 from scapy.packet import Packet, bind_layers
 from scapy.layers.inet import IP
 from scapy.layers.l2 import Ether
@@ -23,16 +23,25 @@ class PWOSPFHeader(Packet):
 class PWOSPFHello(Packet):
     name = "PWOSPFHello"
     fields_desc = [ 
-                    IntField("Network Mask", 0xffffff00),
+                    IntField("NetworkMask", 0xffffff00),
                     ShortField("HelloInt", 5),
                     ShortField("Padding", 0)
                 ]
+
+class PWOSPFLSA(Packet):
+    name = "PWOSPFLSA"
+    field_desc = [
+                    IntField("subnet", 0),
+                    IntField("mask", 0),
+                    IntField("routerID", 0),
+    ]
 
 class PWOSPFLSU(Packet):
     name = "PWOSPFLSU"
     fields_desc = [ 
                     ShortField("Sequence", 0),
-                    ShortField("TTL", 0),
+                    ShortField("TTL", 1),
+                    PacketListField("# Advertisements", [], PWOSPFLSA, length_from = lambda p: p.tp_len),
                     FieldLenField("# Advertisements", None),
                 ]
 

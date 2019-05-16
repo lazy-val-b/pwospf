@@ -143,7 +143,6 @@ class PWOSPFController(Thread):
         sendp(*args, **kwargs)
 
     def run(self):
-        print "blub"
         Thread(target=self.runSniff).start()
         Thread(target=self.sendRegularlyHello).start()
 

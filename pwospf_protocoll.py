@@ -35,8 +35,8 @@ class PWOSPFLSA(Packet):
                     IntField("mask", 0),
                     IntField("routerID", 0),
     ]
-    def extract_padding(self, s):
-        return '', s
+    # def extract_padding(self, s):
+    #     return '', s
 
 class PWOSPFLSU(Packet):
     name = "PWOSPFLSU"

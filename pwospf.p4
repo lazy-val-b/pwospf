@@ -141,9 +141,8 @@ control MyIngress(inout headers hdr,
     action decr_ttl() {
         hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
     }
-    action ipv4_forward(macAddr_t dstAddr, egressSpec_t port) {
+    action ipv4_forward(egressSpec_t port) {
         standard_metadata.egress_spec = port;
-        hdr.ethernet.dstAddr  = dstAddr;
         decr_ttl();
     }
 

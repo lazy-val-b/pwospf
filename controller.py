@@ -14,27 +14,32 @@ PWOSPF_OP_HELLO   = 0x0001
 PWOSPF_OP_LSU = 0x0004
 
 class PWOSPFController(Thread):
-    def __init__(self, sw, chost, helloint, mask, areaID, net, rid=0, start_wait=0.3 ):
+    def __init__(self, sw, chost, helloint, mask, areaID, net, hosts, rid=0, start_wait=0.3 ):
         super(PWOSPFController, self).__init__()
         self.sw = sw
         self.start_wait = start_wait # time to wait for the controller to be listenning
         self.iface = sw.intfs[1].name
-        self.port_for_mac = {}
+        self.port_for_ip = {}
         self.stop_event = Event()
         self.ifaces = {}
         self.chost = chost
+        self.neighbours = {}
+        self.timer = 0
         self.db = {
-            'myNodes': [],
-            'neighbours': [],
             'helloInt': helloint,
             'routerID': rid,
             'areaID': areaID,
             'mask': mask,
             'lsuInt': 30
         }
-        prev_dict = self.dijkstra(net.topo.nodes(), net.topo.links(), self.sw.name)
-        self.setupTopo(prev_dict, net, self.sw.name)
+        self.setupHosts(hosts)
+        # prev_dict = self.dijkstra(net.topo.nodes(), net.topo.links(), self.sw.name)
+        # self.setupTopo(prev_dict, net, self.sw.name)
         self.setupMulticast(10)
+
+    def setupHosts(self, hosts):
+        for host in hosts:
+            self.addIPAddr(host[0], host[1])
 
 
     def dijkstra(self, V, E, me):
@@ -85,16 +90,15 @@ class PWOSPFController(Thread):
 
 
 
-    def addMacAddr(self, mac, ip, port):
-        # Don't re-add the mac-port mapping if we already have it:
-        if mac in self.port_for_mac: return
+    def addIPAddr(self, ip, port):
+        # Don't re-add the ip-port mapping if we already have it:
+        if ip in self.port_for_ip: return
 
         self.sw.insertTableEntry(table_name='MyIngress.ipv4_lpm',
                         match_fields={'hdr.ipv4.dstAddr': [ip, 32]},
                         action_name='MyIngress.ipv4_forward',
-                        action_params={ 'dstAddr': mac,
-                                        'port': port})
-        self.port_for_mac[mac] = port
+                        action_params={ 'port': port})
+        self.port_for_ip[ip] = port
 
     def setupMulticast(self, mgid):
         self.sw.insertTableEntry(table_name='MyIngress.ipv4_lpm',
@@ -106,7 +110,11 @@ class PWOSPFController(Thread):
         self.sw.addMulticastGroup(mgid=mgid, ports=range(2, 6))
 
     def handleHello(self, pkt):
-        pkt.show2()
+        if pkt['PWOSPFHeader'].routerID in self.neighbours:
+            self.neighbours[pkt['PWOSPFHeader'].routerID][1] = self.timer
+        else:
+            if pkt['PWOSPFHello'].NetworkMask != self.db['mask']: return
+            self.neighbours[pkt['PWOSPFHeader'].routerID] = [pkt['PWOSPFHello'].HelloInt, self.timer]
 
     def handleLSU(self, pkt):
         pkt.show2()
@@ -122,7 +130,7 @@ class PWOSPFController(Thread):
                     elif (pkt['PWOSPFHeader'].Type == 4): # we got a LSU
                         self.handleLSU(pkt)
                     else:
-                        print 'Invalid type, dropperino'
+                        print('Invalid type, dropperino')
         else:
             assert PWOSPFHeader in pkt, "Should only receive packets from switch with special header"
 
@@ -137,6 +145,7 @@ class PWOSPFController(Thread):
         Thread(target=self.runSniff).start()
         Thread(target=self.sendRegularlyHello).start()
         Thread(target=self.sendRegularlyLSU).start()
+        Thread(target=self.checkNeighbours).start()
 
     def runSniff(self):
         sniff(iface=self.iface, prn=self.handlePkt, stop_event=self.stop_event)
@@ -157,13 +166,19 @@ class PWOSPFController(Thread):
         self.LSUPacket()
         Timer(self.db['lsuInt'], self.sendRegularlyLSU).start()
     
+    def checkNeighbours(self):
+        for neighbour in self.neighbours:
+            if (self.timer - self.neighbours[neighbour][1]) > self.neighbours[neighbour][0]:
+                del self.neighbours[neighbour]
+        self.timer = self.timer + 1
+        Timer(1, self.checkNeighbours).start()
 
     def helloPacket(self):
         f = Ether(dst='ff:ff:ff:ff:ff:ff')/ CPUMetadata()/IP(src=self.chost.IP(), dst=ALLSPFRouters)
 
         g = f/PWOSPFHeader(routerID=self.db['routerID'], areaID=self.db['areaID'])
 
-        h = g/PWOSPFHello(HelloInt=self.db['helloInt'])
+        h = g/PWOSPFHello(HelloInt=self.db['helloInt'], NetworkMask=self.db['mask'])
         self.send(h)
 
     def LSUPacket(self):

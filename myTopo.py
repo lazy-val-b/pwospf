@@ -11,15 +11,15 @@ class MyTopo( Topo ):
             key = 's' + str(i)
             switches[key] = self.addSwitch(key)
 
-        hosts['h1'] = self.addHost('h1', ip = "192.168.0.1", mac = '00:00:00:00:00:01')
-        hosts['h2'] = self.addHost('h2', ip = "192.168.0.2", mac = '00:00:00:00:00:02')
-        hosts['h3'] = self.addHost('h3', ip = "192.168.0.3", mac = '00:00:00:00:00:03')
-        hosts['h4'] = self.addHost('h4', ip = "192.168.0.4", mac = '00:00:00:00:00:04')
-        hosts['h5'] = self.addHost('h5', ip = "192.168.0.5", mac = '00:00:00:00:00:05')
-        hosts['h6'] = self.addHost('h6', ip = "192.168.0.6", mac = '00:00:00:00:00:06')
-        hosts['c1'] = self.addHost('c1', ip = "192.168.0.7", mac = '00:00:00:00:00:07')
-        hosts['c2'] = self.addHost('c2', ip = "192.168.0.8", mac = '00:00:00:00:00:08')
-        hosts['c3'] = self.addHost('c3', ip = "192.168.0.9", mac = '00:00:00:00:00:09')
+        hosts['h1'] = self.addHost('h1', ip = "192.168.0.1")
+        hosts['h2'] = self.addHost('h2', ip = "192.168.0.2")
+        hosts['h3'] = self.addHost('h3', ip = "192.168.0.3")
+        hosts['h4'] = self.addHost('h4', ip = "192.168.0.4")
+        hosts['h5'] = self.addHost('h5', ip = "192.168.0.5")
+        hosts['h6'] = self.addHost('h6', ip = "192.168.0.6")
+        hosts['c1'] = self.addHost('c1', ip = "192.168.0.7")
+        hosts['c2'] = self.addHost('c2', ip = "192.168.0.8")
+        hosts['c3'] = self.addHost('c3', ip = "192.168.0.9")
 
 
 

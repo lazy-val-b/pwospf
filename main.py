@@ -30,11 +30,11 @@ def printLinkInfos():
 
 # Start a controller for each switch
 # Since the IP of the 0th interface is always the same, I set the router ID here myself.
-cpu1 = PWOSPFController(s1, c1, 5, 0xffffff00, 17, net, rid=1).start()
+cpu1 = PWOSPFController(s1, c1, 5, 0xffffffff, 17, net, [("192.168.0.1", 2), ("192.168.0.2", 3) ], rid=1 ).start()
 
-cpu2 = PWOSPFController(s2, c2, 5, 0xffffff00, 17, net, rid=2).start()
+cpu2 = PWOSPFController(s2, c2, 5, 0xffffffff, 17, net, [("192.168.0.3", 2), ("192.168.0.4", 3) ], rid=2).start()
 
-cpu3 = PWOSPFController(s3, c3, 5, 0xffffff00, 17, net, rid=3).start()
+cpu3 = PWOSPFController(s3, c3, 5, 0xffffffff, 17, net, [("192.168.0.5", 2), ("192.168.0.6", 3) ], rid=3).start()
 
 
 while True:

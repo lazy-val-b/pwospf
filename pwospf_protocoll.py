@@ -35,13 +35,15 @@ class PWOSPFLSA(Packet):
                     IntField("mask", 0),
                     IntField("routerID", 0),
     ]
+    def extract_padding(self, s):
+        return '', s
 
 class PWOSPFLSU(Packet):
     name = "PWOSPFLSU"
     fields_desc = [ 
                     ShortField("Sequence", 0),
                     ShortField("TTL", 1),
-                    PacketListField("Advertisements", [], PWOSPFLSA, count_from=lambda pkt:pkt.NumAdvertisements),
+                    PacketListField("Advertisements", None, PWOSPFLSA, count_from = None),
                     FieldLenField("NumAdvertisements",None,count_of="Advertisements", fmt="B"),
                 ]
 
@@ -49,3 +51,4 @@ bind_layers(Ether, PWOSPFHeader, type=TYPE_PWOSPF_TYPE)
 bind_layers(IP, PWOSPFHeader, proto=TYPE_PWOSPF_TYPE)
 bind_layers(PWOSPFHeader, PWOSPFHello, Type=1)
 bind_layers(PWOSPFHeader, PWOSPFLSU, Type=4)
+bind_layers(PWOSPFLSU, PWOSPFLSA, subnet=2)
